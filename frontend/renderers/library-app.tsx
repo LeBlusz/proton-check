@@ -31,7 +31,17 @@ export async function patch(window: Window, app: Steam.AppOverview) {
       return;
     }
 
-    // Simple approach: just add the medal directly
+    // Function to ensure our medal is always the last element
+    const ensureLastPosition = (parent: Element) => {
+      const medalElement = parent.querySelector(`[data-protondb-medal]`);
+      if (medalElement && medalElement !== parent.lastElementChild) {
+        // Move it to the end if it's not already there
+        parent.appendChild(medalElement);
+        console.log("🔍 Proton Check: Moved ProtonDB medal to last position");
+      }
+    };
+
+    // Add loading placeholder immediately
     for (const parent of parents) {
       console.log(`🔍 Proton Check: Processing parent element with ${parent.children.length} children`);
 
@@ -49,6 +59,19 @@ export async function patch(window: Window, app: Steam.AppOverview) {
       parent.appendChild(loadingElement);
       console.log(`🔍 Proton Check: Added loading medal, parent now has ${parent.children.length} children`);
 
+      // Set up a MutationObserver to maintain the last position
+      const observer = new MutationObserver(() => {
+        ensureLastPosition(parent);
+      });
+
+      observer.observe(parent, {
+        childList: true,
+        subtree: false,
+      });
+
+      // Store the observer on the parent for cleanup later
+      (parent as any)._protonObserver = observer;
+
       // Fetch data and update
       fetchProtonDBTier(app.appid).then((tier) => {
         console.log(`🔍 Proton Check: Fetched tier for app ${app.appid}: ${tier}`);
@@ -59,6 +82,8 @@ export async function patch(window: Window, app: Steam.AppOverview) {
           const element = renderComponent(component);
           element.setAttribute("data-protondb-medal", "");
           existing.replaceWith(element);
+          // Ensure it's still the last element after replacement
+          ensureLastPosition(parent);
           console.log(`🔍 Proton Check: Updated medal to tier: ${tier}`);
         }
       }).catch((error) => {
@@ -70,6 +95,8 @@ export async function patch(window: Window, app: Steam.AppOverview) {
           const element = renderComponent(component);
           element.setAttribute("data-protondb-medal", "");
           existing.replaceWith(element);
+          // Ensure it's still the last element after replacement
+          ensureLastPosition(parent);
         }
       });
     }
