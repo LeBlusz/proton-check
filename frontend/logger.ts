@@ -28,4 +28,4 @@ class Logger {
   }
 }
 
-export default new Logger("Size on Disk");
+export default new Logger("Proton Check");

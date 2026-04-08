@@ -1,6 +1,6 @@
-# Size on Disk <a href='https://ko-fi.com/X8X554X28' target='_blank'>☕</a>
+# Proton Check 
 
-A Millennium plugin that allows you to instantly see the size of a game on disk.
+A Millennium plugin that allows you to instantly see the ProtonDB compatibility medal for a game.
 
 ---
 
