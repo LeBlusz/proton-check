@@ -11,3 +11,9 @@ Any checks, PRs, and contributions are welcome but don't expect me to fix much b
 ## Prerequisites
 
 - [Millennium](https://steambrew.app/)
+
+## Building instructions
+- Clone this repo
+- run `npm install` in the project directory
+- run `npm run build` in the project directory
+
