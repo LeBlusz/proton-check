@@ -1,4 +1,4 @@
-import { findClassModule } from "@steambrew/client";
+import { Millennium, findClassModule } from "@steambrew/client";
 import logger from "../logger.js";
 
 const PlayBar = findClassModule((m) => m.GameStat) as Record<string, string>;
@@ -22,83 +22,65 @@ const TIER_COLORS: Record<string, string> = {
   loading: "#666666",
 };
 
-// Cache for ProtonDB tiers to avoid repeated API calls
-const tierCache = new Map<number, string>();
+interface CacheEntry {
+  tier: string;
+  timestamp: number;
+}
 
-export async function fetchProtonDBTier(appId: number): Promise<string> {
-  // Check cache first
-  if (tierCache.has(appId)) {
-    const cachedTier = tierCache.get(appId)!;
-    logger.debug(`Using cached ProtonDB tier for app ${appId}: ${cachedTier}`);
-    return cachedTier;
+interface TierResult {
+  tier: string;
+  source: "cache" | "api";
+}
+
+const tierCache = new Map<number, CacheEntry>();
+const SUCCESS_CACHE_DURATION = 24 * 60 * 60 * 1000;
+const FAILURE_CACHE_DURATION = 60 * 1000;
+
+function getCachedTier(appId: number): TierResult | null {
+  const cached = tierCache.get(appId);
+  if (!cached) return null;
+
+  const ttl = cached.tier === "unknown" ? FAILURE_CACHE_DURATION : SUCCESS_CACHE_DURATION;
+  if (Date.now() - cached.timestamp > ttl) {
+    tierCache.delete(appId);
+    return null;
   }
 
-  try {
-    // Try multiple CORS proxy services
-    const endpoints = [
-      // CORS proxy that should work
-      `https://cors-anywhere.herokuapp.com/https://protondb-community-api-04f42bc1742f.herokuapp.com/api/games/${appId}/summary`,
-      // Alternative proxy
-      `https://thingproxy.freeboard.io/fetch/https://protondb-community-api-04f42bc1742f.herokuapp.com/api/games/${appId}/summary`,
-      // Direct fetch as last resort (will likely fail due to CORS)
-      `https://protondb-community-api-04f42bc1742f.herokuapp.com/api/games/${appId}/summary`,
-    ];
+  return { tier: cached.tier, source: "cache" };
+}
 
-    for (const url of endpoints) {
-      try {
-        logger.debug(`Attempting to fetch ProtonDB tier from: ${url}`);
-        
-        const response = await fetch(url, {
-          method: "GET",
-          headers: {
-            "Accept": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          },
-          // Add timeout
-          signal: AbortSignal.timeout(5000), // 5 second timeout
-        });
-        
-        logger.debug(`Response status: ${response.status}`);
-        
-        if (response.ok) {
-          const data = (await response.json()) as { tier?: string };
-          logger.debug(`Response data:`, data);
-          
-          let tier = data.tier;
-          if (!tier) {
-            logger.debug(`No tier found in response for app ${appId}`);
-            continue;
-          }
-          
-          // tier comes as "Platinum", "Gold", "Silver", "Bronze" - normalize to lowercase
-          tier = tier.toLowerCase();
-          
-          if (!["platinum", "gold", "silver", "bronze"].includes(tier)) {
-            logger.debug(`Unknown tier value: ${tier}`);
-            continue;
-          }
-          
-          // Cache the result
-          tierCache.set(appId, tier);
-          logger.debug(`Successfully fetched and cached ProtonDB tier for app ${appId}: ${tier}`);
-          return tier;
-        } else {
-          logger.debug(`HTTP error ${response.status} for ${url}`);
-        }
-      } catch (urlError) {
-        logger.debug(`Failed to fetch from ${url}:`, urlError);
-        continue;
-      }
+function setCachedTier(appId: number, tier: string) {
+  tierCache.set(appId, { tier, timestamp: Date.now() });
+}
+
+export async function fetchProtonDBTier(appId: number): Promise<TierResult> {
+  const cached = getCachedTier(appId);
+  if (cached) {
+    console.log(`🔍 Proton Check: Cache hit for app ${appId}: ${cached.tier}`);
+    return cached;
+  }
+
+  console.log(`🔍 Proton Check: API request for app ${appId}`);
+
+  try {
+    const response = await Millennium.callServerMethod("GetProtonDBTier", { appId });
+    const payload = typeof response === "string" ? JSON.parse(response) : response;
+
+    if (payload?.success && typeof payload.tier === "string") {
+      setCachedTier(appId, payload.tier);
+      logger.debug(`Successfully fetched ProtonDB tier for app ${appId}: ${payload.tier}`);
+      console.log(`🔍 Proton Check: API success for app ${appId}: ${payload.tier}`);
+      return { tier: payload.tier, source: "api" };
     }
 
-    // If all endpoints failed, cache and return unknown
-    tierCache.set(appId, "unknown");
-    logger.debug(`Failed to fetch ProtonDB tier for app ${appId} from all endpoints, caching as unknown`);
-    return "unknown";
+    const errorMessage = payload?.error ?? "unknown error";
+    console.warn(`🔍 Proton Check: API failure for app ${appId}: ${errorMessage}`);
+    setCachedTier(appId, "unknown");
+    return { tier: "unknown", source: "api" };
   } catch (error) {
-    logger.debug(`Error in fetchProtonDBTier for app ${appId}:`, error);
-    tierCache.set(appId, "unknown");
-    return "unknown";
+    console.error(`🔍 Proton Check: Backend fetch failed for app ${appId}:`, error);
+    setCachedTier(appId, "unknown");
+    return { tier: "unknown", source: "api" };
   }
 }
 

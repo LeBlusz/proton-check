@@ -73,18 +73,18 @@ export async function patch(window: Window, app: Steam.AppOverview) {
       (parent as any)._protonObserver = observer;
 
       // Fetch data and update
-      fetchProtonDBTier(app.appid).then((tier) => {
-        console.log(`🔍 Proton Check: Fetched tier for app ${app.appid}: ${tier}`);
+      fetchProtonDBTier(app.appid).then((result) => {
+        console.log(`🔍 Proton Check: ${result.source === "cache" ? "Cached" : "Fetched"} tier for app ${app.appid}: ${result.tier}`);
 
         const existing = parent.querySelector(`[data-protondb-medal]`);
         if (existing) {
-          const component = <ProtonDBMedal tier={tier} />;
+          const component = <ProtonDBMedal tier={result.tier} />;
           const element = renderComponent(component);
           element.setAttribute("data-protondb-medal", "");
           existing.replaceWith(element);
           // Ensure it's still the last element after replacement
           ensureLastPosition(parent);
-          console.log(`🔍 Proton Check: Updated medal to tier: ${tier}`);
+          console.log(`🔍 Proton Check: Updated medal to tier: ${result.tier}`);
         }
       }).catch((error) => {
         console.log(`🔍 Proton Check: Failed to fetch tier for app ${app.appid}:`, error);

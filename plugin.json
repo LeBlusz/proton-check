@@ -4,5 +4,5 @@
   "common_name": "Proton Check",
   "description": "Instantly see the ProtonDB compatibility medal for a game.",
   "version": "1.0.0",
-  "useBackend": false
+  "backendType": "lua"
 }
